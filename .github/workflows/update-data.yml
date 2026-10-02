@@ -1,7 +1,7 @@
 name: Update flood data
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
 permissions:
   contents: write
@@ -11,27 +11,36 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Fetch ThaiWater data
         run: |
-          mkdir -p data
+          mkdir -p /tmp/raw
           B=https://api-v3.thaiwater.net/api/v1/thaiwater30/public
           fetch_one() {
-            if curl -fsSL --retry 3 --retry-delay 15 -m 90 -A "Mozilla/5.0 (SaranFloodGuide; +https://vinsenth.github.io/saran-flood-guide/)" "$B/$2" -o "data/$1.tmp" && python3 -c "import json,sys; json.load(open(sys.argv[1]))" "data/$1.tmp"; then
-              mv "data/$1.tmp" "data/$1.json"
+            if curl -fsSL --retry 3 --retry-delay 15 -m 90 -A "Mozilla/5.0 (SaranFloodGuide; +https://vinsenth.github.io/saran-flood-guide/)" "$B/$2" -o "/tmp/raw/$1.json"; then
+              echo "fetched $2"
             else
               echo "::warning::failed to fetch $2"
-              rm -f "data/$1.tmp"
+              rm -f "/tmp/raw/$1.json"
             fi
           }
           fetch_one waterlevel waterlevel_load
           fetch_one rain rain_24h
           fetch_one main thailand_main
+      - name: Trim to small files
+        run: |
+          python3 scripts/trim.py /tmp/raw data
+          git rm -q --cached --ignore-unmatch data/main.json
+          rm -f data/main.json
           ls -la data
       - name: Commit data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data
-          if git diff --cached --quiet; then echo "no changes"; else git commit -m "Update flood data $(date -u +%Y-%m-%dT%H:%MZ)" && git push; fi
+          git add -A data
+          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "Update flood data $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3; do git pull --rebase -q && git push && exit 0; sleep 5; done
+          exit 1
