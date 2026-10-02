@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Saran Flood Guide</title>
+<meta name="description" content="Saran Flood Guide — ติดตามสถานการณ์น้ำท่วมในประเทศไทยแบบเรียลไทม์ จากข้อมูลสาธารณะ ThaiWater, GDACS และ Open-Meteo">
+<meta property="og:title" content="Saran Flood Guide">
+<meta property="og:description" content="สถานการณ์น้ำท่วมประเทศไทย ระดับน้ำ ฝน เขื่อน และคำเตือนภัย อัปเดตอัตโนมัติ">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 4C22 20 12 31 12 42a20 20 0 0 0 40 0C52 31 42 20 32 4z' fill='%230e7490'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#f6f8fa; --surface:#ffffff; --surface-2:#eef3f6; --text:#14212b; --muted:#5b6b78; --line:#dbe3ea;
+  --brand:#0e7490; --brand-2:#155e75; --brand-soft:#e0f2f7;
+  --lv1:#b45309; --lv2:#d4a017; --lv3:#16a34a; --lv4:#2563eb; --lv5:#dc2626;
+  --warn-bg:#fff7ed; --warn-text:#9a3412;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1419; --surface:#141d24; --surface-2:#1b2730; --text:#e5edf2; --muted:#9aabb8; --line:#26343e;
+    --brand:#22a6c3; --brand-2:#5cc6dd; --brand-soft:#123440;
+    --lv1:#f59e0b; --lv2:#facc15; --lv3:#4ade80; --lv4:#60a5fa; --lv5:#f87171;
+    --warn-bg:#2a1a0e; --warn-text:#fdba74; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1419; --surface:#141d24; --surface-2:#1b2730; --text:#e5edf2; --muted:#9aabb8; --line:#26343e;
+  --brand:#22a6c3; --brand-2:#5cc6dd; --brand-soft:#123440;
+  --lv1:#f59e0b; --lv2:#facc15; --lv3:#4ade80; --lv4:#60a5fa; --lv5:#f87171;
+  --warn-bg:#2a1a0e; --warn-text:#fdba74; --shadow:none;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans Thai",system-ui,sans-serif;font-size:16px;line-height:1.6}
+a{color:var(--brand)}
+.wrap{max-width:1160px;margin:0 auto;padding:0 16px}
+header.top{position:sticky;top:0;z-index:1000;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:12px;height:60px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:var(--text);text-decoration:none;white-space:nowrap}
+.logo svg{width:28px;height:28px}
+nav.menu{display:flex;gap:4px;margin-left:auto;overflow-x:auto;scrollbar-width:none}
+nav.menu a{padding:6px 10px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:14px;white-space:nowrap}
+nav.menu a:hover{background:var(--surface-2);color:var(--text)}
+@media (max-width:640px){nav.menu{display:none}#themeBtn{margin-left:auto}.kpi .value{font-size:24px}}
+.icon-btn{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:8px;height:34px;min-width:34px;cursor:pointer;font:inherit;font-size:14px;padding:0 10px}
+.hero{padding:40px 0 24px}
+.hero h1{font-size:clamp(28px,5vw,44px);line-height:1.15;margin:0 0 8px;letter-spacing:-.01em}
+.hero p.lead{color:var(--muted);margin:0 0 16px;max-width:720px}
+.status-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--muted)}
+.dot.ok{background:var(--lv3)} .dot.err{background:var(--lv5)} .dot.load{background:var(--lv2);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+section{padding:28px 0}
+section h2{font-size:22px;margin:0 0 4px}
+section .sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+.grid{display:grid;gap:16px}
+.kpis{grid-template-columns:repeat(4,1fr)}
+@media (max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);min-width:0}
+.kpi .label{color:var(--muted);font-size:13px}
+.kpi .value{font-size:32px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.kpi .note{font-size:12px;color:var(--muted)}
+.kpi.danger .value{color:var(--lv5)} .kpi.watch .value{color:var(--lv4)}
+.two{grid-template-columns:1.6fr 1fr}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+#map{height:480px;border-radius:12px;border:1px solid var(--line);z-index:1}
+@media (max-width:600px){#map{height:360px}}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--muted);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:50%;display:inline-block}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+input[type=search],select{font:inherit;font-size:14px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);min-width:0}
+input[type=search]{flex:1 1 220px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;border:0;background:var(--surface);color:var(--muted);padding:7px 12px;cursor:pointer}
+.seg button.on{background:var(--brand);color:#fff}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{background:var(--surface-2);font-weight:600;color:var(--muted);font-size:13px;position:sticky;top:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}
+.bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;min-width:80px}
+.bar>i{display:block;height:100%;border-radius:4px}
+.list{display:flex;flex-direction:column;gap:8px}
+.rain-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 64px;gap:10px;align-items:center;font-size:14px}
+.rain-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rain-row .nm small{color:var(--muted)}
+.rain-row .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.alert-item{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.alert-item .lvl{width:10px;align-self:stretch;border-radius:6px;flex:0 0 10px}
+.alert-item h4{margin:0 0 2px;font-size:15px}
+.alert-item p{margin:0;font-size:13px;color:var(--muted)}
+.fc{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end;height:200px;margin-top:8px}
+.fc .col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:12px;color:var(--muted)}
+.fc .b{width:70%;max-width:42px;background:var(--brand);border-radius:6px 6px 2px 2px;min-height:2px}
+.fc .mm{font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.guide{grid-template-columns:repeat(3,1fr)}
+@media (max-width:860px){.guide{grid-template-columns:1fr}}
+.guide h3{margin:0 0 8px;font-size:17px}
+.guide ul{margin:0;padding-left:20px}
+.guide li{margin-bottom:4px}
+.contacts{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.contact{display:flex;flex-direction:column;text-decoration:none;color:var(--text)}
+.contact b{font-size:26px;color:var(--brand)}
+.contact span{font-size:13px;color:var(--muted)}
+.msg{padding:12px 14px;border-radius:10px;background:var(--warn-bg);color:var(--warn-text);font-size:14px}
+.empty{color:var(--muted);font-size:14px;padding:12px}
+.sources li{margin-bottom:6px}
+footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);font-size:13px;margin-top:20px}
+.leaflet-popup-content{font-family:"IBM Plex Sans Thai",sans-serif;font-size:13px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="Saran Flood Guide">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4C22 20 12 31 12 42a20 20 0 0 0 40 0C52 31 42 20 32 4z" fill="var(--brand)"/><path d="M20 44c4 3 8 3 12 0s8-3 12 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+      Saran Flood Guide
+    </a>
+    <nav class="menu" aria-label="เมนู">
+      <a href="#overview">ภาพรวม</a>
+      <a href="#map-sec">แผนที่</a>
+      <a href="#water">ระดับน้ำ</a>
+      <a href="#rain">ฝน</a>
+      <a href="#dams">เขื่อน</a>
+      <a href="#alerts">เตือนภัย</a>
+      <a href="#guide">คู่มือ</a>
+      <a href="#contacts">สายด่วน</a>
+    </nav>
+    <button class="icon-btn" id="themeBtn" title="สลับโหมดสว่าง/มืด" aria-label="สลับธีม">◐</button>
+  </div>
+</header>
+
+<main id="top">
+<div class="wrap">
+  <div class="hero">
+    <h1>สถานการณ์น้ำท่วมประเทศไทย</h1>
+    <p class="lead">ติดตามระดับน้ำในแม่น้ำ ปริมาณฝน ความจุเขื่อน และคำเตือนภัยน้ำท่วม จากแหล่งข้อมูลสาธารณะ อัปเดตอัตโนมัติทุก 15 นาที</p>
+    <div class="status-row">
+      <span class="pill"><span class="dot load" id="st-water"></span>ระดับน้ำ</span>
+      <span class="pill"><span class="dot load" id="st-rain"></span>ฝน 24 ชม.</span>
+      <span class="pill"><span class="dot load" id="st-dam"></span>เขื่อน</span>
+      <span class="pill"><span class="dot load" id="st-gdacs"></span>GDACS</span>
+      <span class="pill"><span class="dot load" id="st-fc"></span>พยากรณ์ฝน</span>
+      <span id="updated">กำลังโหลดข้อมูล…</span>
+      <button class="icon-btn" id="refreshBtn">↻ รีเฟรช</button>
+    </div>
+  </div>
+
+  <section id="overview" style="padding-top:8px">
+    <div class="grid kpis">
+      <div class="card kpi danger"><div class="label">สถานีน้ำล้นตลิ่ง</div><div class="value" id="k-over">–</div><div class="note">ระดับน้ำ &gt; 100% ของความจุลำน้ำ</div></div>
+      <div class="card kpi watch"><div class="label">สถานีน้ำมาก (เฝ้าระวัง)</div><div class="value" id="k-high">–</div><div class="note">ระดับน้ำ 70–100%</div></div>
+      <div class="card kpi"><div class="label">ฝนสะสม 24 ชม. สูงสุด</div><div class="value" id="k-rain">–</div><div class="note" id="k-rain-where">&nbsp;</div></div>
+      <div class="card kpi"><div class="label">เขื่อนใหญ่ที่น้ำเกิน 80%</div><div class="value" id="k-dam">–</div><div class="note" id="k-dam-note">&nbsp;</div></div>
+    </div>
+  </section>
+
+  <section id="map-sec">
+    <h2>แผนที่สถานีวัดระดับน้ำ</h2>
+    <p class="sub">สีของจุดแสดงสถานการณ์ระดับน้ำเทียบกับความจุลำน้ำ คลิกที่จุดเพื่อดูรายละเอียด</p>
+    <div class="toolbar">
+      <div class="seg" id="mapFilter">
+        <button data-f="all" class="on">ทั้งหมด</button>
+        <button data-f="risk">เฉพาะน้ำมาก/ล้นตลิ่ง</button>
+        <button data-f="rain">ฝนตกหนัก (≥35 มม.)</button>
+      </div>
+    </div>
+    <div id="map" role="region" aria-label="แผนที่"></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--lv1)"></i>น้อยวิกฤต (≤10%)</span>
+      <span><i class="sw" style="background:var(--lv2)"></i>น้อย (10–30%)</span>
+      <span><i class="sw" style="background:var(--lv3)"></i>ปกติ (30–70%)</span>
+      <span><i class="sw" style="background:var(--lv4)"></i>น้ำมาก (70–100%)</span>
+      <span><i class="sw" style="background:var(--lv5)"></i>ล้นตลิ่ง (&gt;100%)</span>
+    </div>
+  </section>
+
+  <section id="water">
+    <h2>สถานีที่ระดับน้ำสูง</h2>
+    <p class="sub">เรียงจาก % ความจุลำน้ำมากไปน้อย — ค้นหาตามจังหวัดหรือชื่อสถานี</p>
+    <div class="toolbar">
+      <input type="search" id="wSearch" placeholder="ค้นหา เช่น อยุธยา, เชียงใหม่, บ้านแก้ง">
+      <select id="wLimit" aria-label="จำนวนแถว"><option value="20">20 แถว</option><option value="50">50 แถว</option><option value="9999">ทั้งหมด</option></select>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>สถานี</th><th>จังหวัด</th><th class="num">ระดับน้ำ (ม.รทก.)</th><th>% ความจุลำน้ำ</th><th>สถานการณ์</th><th>เวลา</th></tr></thead>
+      <tbody id="wBody"><tr><td colspan="6" class="empty">กำลังโหลด…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section id="rain">
+    <div class="grid two">
+      <div>
+        <h2>ฝนสะสม 24 ชั่วโมง สูงสุด 15 อันดับ</h2>
+        <p class="sub">จากสถานีโทรมาตรทั่วประเทศ (มิลลิเมตร) — ≥ 90 มม. ถือเป็นฝนตกหนักมาก</p>
+        <div class="card"><div class="list" id="rainList"><div class="empty">กำลังโหลด…</div></div></div>
+      </div>
+      <div>
+        <h2>พยากรณ์ฝน 7 วัน</h2>
+        <p class="sub">ปริมาณฝนรายวัน (มม.) จาก Open-Meteo</p>
+        <div class="card">
+          <select id="city" aria-label="เลือกเมือง" style="width:100%"></select>
+          <div class="fc" id="fc"></div>
+          <p class="sub" id="fcNote" style="margin:10px 0 0"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="dams">
+    <h2>สถานการณ์เขื่อนขนาดใหญ่</h2>
+    <p class="sub">ปริมาณน้ำกักเก็บ (% ของความจุ) ปริมาณน้ำไหลเข้าและระบาย (ล้าน ลบ.ม.)</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>เขื่อน</th><th>จังหวัด</th><th>% ความจุ</th><th class="num">น้ำไหลเข้า</th><th class="num">น้ำระบาย</th><th>วันที่</th></tr></thead>
+      <tbody id="dBody"><tr><td colspan="6" class="empty">กำลังโหลด…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section id="alerts">
+    <h2>คำเตือนภัยน้ำท่วม (GDACS)</h2>
+    <p class="sub">เหตุการณ์น้ำท่วมที่เกี่ยวข้องกับประเทศไทย จาก Global Disaster Alert and Coordination System (UN/EU)</p>
+    <div class="list" id="alertList"><div class="empty">กำลังโหลด…</div></div>
+  </section>
+
+  <section id="guide">
+    <h2>คู่มือรับมือน้ำท่วม</h2>
+    <p class="sub">สิ่งที่ควรทำก่อน ระหว่าง และหลังน้ำท่วม</p>
+    <div class="grid guide">
+      <div class="card"><h3>ก่อนน้ำมา</h3><ul>
+        <li>ติดตามประกาศจาก ปภ. กรมอุตุฯ และกรมชลประทาน</li>
+        <li>เตรียมถุงยังชีพ: น้ำดื่ม อาหารแห้ง ยาประจำตัว ไฟฉาย พาวเวอร์แบงก์ วิทยุ</li>
+        <li>ใส่เอกสารสำคัญในถุงกันน้ำ</li>
+        <li>ย้ายของมีค่าและเครื่องใช้ไฟฟ้าขึ้นที่สูง</li>
+        <li>วางแผนเส้นทางอพยพและจุดนัดพบของครอบครัว</li>
+      </ul></div>
+      <div class="card"><h3>ระหว่างน้ำท่วม</h3><ul>
+        <li>ตัดสวิตช์ไฟฟ้า ปิดแก๊ส เมื่อน้ำเริ่มเข้าบ้าน</li>
+        <li>อย่าเดินหรือขับรถผ่านกระแสน้ำ — น้ำลึก 15 ซม. ทำให้คนล้มได้ 60 ซม. พัดรถได้</li>
+        <li>ระวังไฟฟ้ารั่ว สัตว์มีพิษ และของมีคมใต้น้ำ</li>
+        <li>อพยพทันทีเมื่อเจ้าหน้าที่แจ้ง</li>
+        <li>โทร 1784 หรือ 1669 เมื่อต้องการความช่วยเหลือ</li>
+      </ul></div>
+      <div class="card"><h3>หลังน้ำลด</h3><ul>
+        <li>ให้ช่างตรวจระบบไฟฟ้าก่อนเปิดใช้</li>
+        <li>ทำความสะอาดและฆ่าเชื้อบ้าน ป้องกันเชื้อรา</li>
+        <li>ระวังโรคฉี่หนู น้ำกัดเท้า ท้องร่วง — สวมรองเท้าบูท</li>
+        <li>ดื่มน้ำสะอาดหรือน้ำต้มสุกเท่านั้น</li>
+        <li>ถ่ายรูปความเสียหายเพื่อยื่นขอรับการช่วยเหลือ</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section id="contacts">
+    <h2>สายด่วนฉุกเฉิน</h2>
+    <p class="sub">แตะเพื่อโทรบนมือถือ</p>
+    <div class="grid contacts">
+      <a class="card contact" href="tel:1784"><b>1784</b><span>กรมป้องกันและบรรเทาสาธารณภัย (ปภ.)</span></a>
+      <a class="card contact" href="tel:1669"><b>1669</b><span>เจ็บป่วยฉุกเฉิน (สพฉ.)</span></a>
+      <a class="card contact" href="tel:191"><b>191</b><span>เหตุด่วนเหตุร้าย (ตำรวจ)</span></a>
+      <a class="card contact" href="tel:1460"><b>1460</b><span>กรมชลประทาน</span></a>
+      <a class="card contact" href="tel:1182"><b>1182</b><span>กรมอุตุนิยมวิทยา</span></a>
+      <a class="card contact" href="tel:1586"><b>1586</b><span>กรมทางหลวง (สภาพเส้นทาง)</span></a>
+      <a class="card contact" href="tel:1146"><b>1146</b><span>กรมทางหลวงชนบท</span></a>
+    </div>
+  </section>
+
+  <section id="sources">
+    <h2>แหล่งข้อมูล</h2>
+    <p class="sub">ข้อมูลทั้งหมดดึงจาก API สาธารณะโดยตรงจากเบราว์เซอร์ของผู้ชม</p>
+    <div class="card"><ul class="sources" style="margin:0;padding-left:20px">
+      <li><a href="https://www.thaiwater.net" target="_blank" rel="noopener">ThaiWater.net</a> — คลังข้อมูลน้ำแห่งชาติ โดย สถาบันสารสนเทศทรัพยากรน้ำ (สสน./HII): ระดับน้ำ ฝน 24 ชม. และเขื่อนขนาดใหญ่</li>
+      <li><a href="https://www.gdacs.org" target="_blank" rel="noopener">GDACS</a> — Global Disaster Alert and Coordination System (UN OCHA &amp; European Commission JRC): คำเตือนภัยน้ำท่วม</li>
+      <li><a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> — พยากรณ์ฝนรายวัน (CC BY 4.0)</li>
+      <li><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> — แผนที่ฐาน</li>
+      <li>ติดตามประกาศทางการเพิ่มเติม: <a href="https://www.disaster.go.th" target="_blank" rel="noopener">ปภ.</a> · <a href="https://www.tmd.go.th" target="_blank" rel="noopener">กรมอุตุนิยมวิทยา</a> · <a href="https://www.rid.go.th" target="_blank" rel="noopener">กรมชลประทาน</a> · <a href="https://flood.gistda.or.th" target="_blank" rel="noopener">GISTDA Flood</a></li>
+    </ul></div>
+  </section>
+</div>
+</main>
+
+<footer><div class="wrap">
+  <b>Saran Flood Guide</b> — เว็บไซต์รวบรวมข้อมูลสาธารณะเพื่อการติดตามสถานการณ์ ไม่ใช่ประกาศทางการ โปรดยึดประกาศจากหน่วยงานรัฐเป็นหลักในการตัดสินใจอพยพ
+</div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  var TW = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/";
+  var SRC = {
+    water: TW + "waterlevel_load",
+    rain: TW + "rain_24h",
+    main: TW + "thailand_main",
+    gdacs: "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=FL&country=Thailand",
+    meteo: "https://api.open-meteo.com/v1/forecast"
+  };
+  var CITIES = [
+    ["กรุงเทพมหานคร",13.7563,100.5018],["พระนครศรีอยุธยา",14.3532,100.5689],["นครสวรรค์",15.7047,100.1372],
+    ["เชียงใหม่",18.7883,98.9853],["เชียงราย",19.9105,99.8406],["พิษณุโลก",16.8211,100.2659],["สุโขทัย",17.0078,99.8230],
+    ["ขอนแก่น",16.4419,102.8360],["อุบลราชธานี",15.2287,104.8564],["นครราชสีมา",14.9799,102.0978],
+    ["ปราจีนบุรี",14.0509,101.3717],["จันทบุรี",12.6114,102.1039],["สุราษฎร์ธานี",9.1382,99.3215],
+    ["นครศรีธรรมราช",8.4304,99.9631],["หาดใหญ่ (สงขลา)",7.0084,100.4747],["ปัตตานี",6.8695,101.2501],["นราธิวาส",6.4255,101.8253]
+  ];
+  var LV = [
+    {n:"น้อยวิกฤต",c:"--lv1"},{n:"น้อย",c:"--lv2"},{n:"ปกติ",c:"--lv3"},{n:"น้ำมาก",c:"--lv4"},{n:"ล้นตลิ่ง",c:"--lv5"}
+  ];
+  var state = { water:[], rain:[], dams:[], mapFilter:"all" };
+  var $ = function(id){ return document.getElementById(id); };
+  var css = function(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
+  var esc = function(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); };
+  var num = function(v){ var n = parseFloat(v); return isFinite(n) ? n : null; };
+  var fmt = function(n,d){ return n==null ? "–" : n.toLocaleString("th-TH",{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); };
+  var th = function(o){ return o ? (o.th || o.en || "") : ""; };
+
+  function getJSON(url, ms){
+    var ctl = new AbortController(); var t = setTimeout(function(){ ctl.abort(); }, ms || 20000);
+    return fetch(url,{signal:ctl.signal}).then(function(r){ clearTimeout(t); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
+  }
+  function setStatus(id, s){ var el=$(id); el.className = "dot " + s; }
+  function findArray(j){
+    if (Array.isArray(j)) return j;
+    if (!j || typeof j!=="object") return [];
+    if (Array.isArray(j.data)) return j.data;
+    for (var k in j){ var v=j[k]; if (v && typeof v==="object"){ var a=findArray(v); if (a.length) return a; } }
+    return [];
+  }
+  function levelOf(pct, sit){
+    if (pct!=null){ if(pct>100) return 5; if(pct>70) return 4; if(pct>30) return 3; if(pct>10) return 2; return 1; }
+    var s = parseInt(sit,10); return (s>=1 && s<=5) ? s : 0;
+  }
+  function badge(l){ if(!l) return '<span class="badge" style="background:var(--muted)">ไม่มีข้อมูล</span>'; return '<span class="badge" style="background:var('+LV[l-1].c+')">'+LV[l-1].n+'</span>'; }
+  function failMsg(name, url){ return '<div class="msg">ไม่สามารถโหลดข้อมูล'+esc(name)+'ได้ในขณะนี้ — <a href="'+url+'" target="_blank" rel="noopener">เปิดดูที่แหล่งข้อมูล</a></div>'; }
+
+  /* ---------- Map ---------- */
+  var map=null, layer=null;
+  function initMap(){
+    if (!window.L) { $("map").innerHTML = '<div class="empty">โหลดแผนที่ไม่สำเร็จ</div>'; return; }
+    map = L.map("map",{scrollWheelZoom:false}).setView([13.2,101.0],6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+  function drawMap(){
+    if (!map) return; layer.clearLayers();
+    if (state.mapFilter==="rain"){
+      state.rain.filter(function(r){return r.v>=35;}).forEach(function(r){
+        if (r.lat==null) return;
+        var c = r.v>=90 ? css("--lv5") : css("--lv4");
+        L.circleMarker([r.lat,r.lng],{radius:Math.min(4+r.v/15,16),color:c,fillColor:c,fillOpacity:.55,weight:1})
+          .bindPopup("<b>"+esc(r.name)+"</b><br>"+esc(r.prov)+"<br>ฝน 24 ชม.: <b>"+fmt(r.v,1)+" มม.</b><br>"+esc(r.time)).addTo(layer);
+      });
+      return;
+    }
+    state.water.forEach(function(w){
+      if (w.lat==null || w.lng==null) return;
+      if (state.mapFilter==="risk" && w.lvl<4) return;
+      var c = w.lvl ? css(LV[w.lvl-1].c) : css("--muted");
+      L.circleMarker([w.lat,w.lng],{radius:w.lvl>=4?7:5,color:c,fillColor:c,fillOpacity:.85,weight:1})
+        .bindPopup("<b>"+esc(w.name)+"</b><br>"+esc(w.prov)+"<br>ระดับน้ำ: "+fmt(w.msl,2)+" ม.รทก.<br>% ความจุลำน้ำ: <b>"+fmt(w.pct,1)+"%</b><br>"+(w.lvl?LV[w.lvl-1].n:"")+"<br><small>"+esc(w.time)+"</small>").addTo(layer);
+    });
+  }
+
+  /* ---------- Water level ---------- */
+  function loadWater(){
+    setStatus("st-water","load");
+    return getJSON(SRC.water).then(function(j){
+      state.water = findArray(j).map(function(d){
+        var st=d.station||{}, pct=num(d.storage_percent);
+        return { name: th(st.tele_station_name), prov: th((d.geocode||{}).province_name), msl: num(d.waterlevel_msl),
+          pct: pct, lvl: levelOf(pct, d.situation_level), time: d.waterlevel_datetime||"", lat: num(st.tele_station_lat), lng: num(st.tele_station_long) };
+      }).filter(function(w){ return w.name; });
+      state.water.sort(function(a,b){ return (b.pct==null?-1e9:b.pct)-(a.pct==null?-1e9:a.pct); });
+      $("k-over").textContent = fmt(state.water.filter(function(w){return w.lvl===5;}).length);
+      $("k-high").textContent = fmt(state.water.filter(function(w){return w.lvl===4;}).length);
+      renderWater(); drawMap(); setStatus("st-water","ok");
+    }).catch(function(){
+      setStatus("st-water","err");
+      $("wBody").innerHTML = '<tr><td colspan="6">'+failMsg("ระดับน้ำ","https://www.thaiwater.net/water/wl")+'</td></tr>';
+    });
+  }
+  function renderWater(){
+    var q = $("wSearch").value.trim().toLowerCase(), lim = +$("wLimit").value;
+    var rows = state.water.filter(function(w){ return !q || (w.name+" "+w.prov).toLowerCase().indexOf(q)>-1; }).slice(0,lim);
+    if (!rows.length){ $("wBody").innerHTML = '<tr><td colspan="6" class="empty">ไม่พบสถานีที่ค้นหา</td></tr>'; return; }
+    $("wBody").innerHTML = rows.map(function(w){
+      var p = w.pct==null?0:Math.min(w.pct,150)/150*100, c = w.lvl?"var("+LV[w.lvl-1].c+")":"var(--muted)";
+      return "<tr><td>"+esc(w.name)+"</td><td>"+esc(w.prov)+'</td><td class="num">'+fmt(w.msl,2)+
+        '</td><td><div style="display:flex;gap:8px;align-items:center"><div class="bar" style="flex:1"><i style="width:'+p+'%;background:'+c+'"></i></div><span style="font-variant-numeric:tabular-nums;min-width:56px;text-align:right">'+fmt(w.pct,1)+'%</span></div></td><td>'+badge(w.lvl)+"</td><td>"+esc(w.time)+"</td></tr>";
+    }).join("");
+  }
+
+  /* ---------- Rain ---------- */
+  function loadRain(){
+    setStatus("st-rain","load");
+    return getJSON(SRC.rain).then(function(j){
+      state.rain = findArray(j).map(function(d){
+        var st=d.station||{};
+        return { name: th(st.tele_station_name), prov: th((d.geocode||{}).province_name), v: num(d.rain_24h), time: d.rainfall_datetime||"",
+          lat: num(st.tele_station_lat), lng: num(st.tele_station_long) };
+      }).filter(function(r){ return r.v!=null; }).sort(function(a,b){ return b.v-a.v; });
+      var top = state.rain.slice(0,15), max = top.length ? top[0].v : 1;
+      if (top.length){ $("k-rain").textContent = fmt(top[0].v,1)+" มม."; $("k-rain-where").textContent = top[0].name+" จ."+top[0].prov; }
+      $("rainList").innerHTML = top.length ? top.map(function(r){
+        var c = r.v>=90 ? "var(--lv5)" : r.v>=35 ? "var(--lv4)" : "var(--brand)";
+        return '<div class="rain-row"><div class="nm">'+esc(r.name)+' <small>จ.'+esc(r.prov)+'</small></div><div class="bar"><i style="width:'+(r.v/max*100)+'%;background:'+c+'"></i></div><div class="v">'+fmt(r.v,1)+'</div></div>';
+      }).join("") : '<div class="empty">ไม่มีรายงานฝนในช่วง 24 ชม.</div>';
+      if (state.mapFilter==="rain") drawMap();
+      setStatus("st-rain","ok");
+    }).catch(function(){
+      setStatus("st-rain","err");
+      $("rainList").innerHTML = failMsg("ฝน 24 ชม.","https://www.thaiwater.net/weather/rain");
+    });
+  }
+
+  /* ---------- Dams ---------- */
+  function loadDams(){
+    setStatus("st-dam","load");
+    return getJSON(SRC.main).then(function(j){
+      var arr = (j && j.dam && j.dam.data && Array.isArray(j.dam.data.data)) ? j.dam.data.data : findArray(j && j.dam);
+      state.dams = arr.map(function(d){
+        return { name: th((d.dam||{}).dam_name), prov: th((d.geocode||{}).province_name), pct: num(d.dam_storage_percent),
+          inflow: num(d.dam_inflow), rel: num(d.dam_released), date: d.dam_date||"" };
+      }).filter(function(d){ return d.name; }).sort(function(a,b){ return (b.pct||0)-(a.pct||0); });
+      var over = state.dams.filter(function(d){ return d.pct>80; });
+      $("k-dam").textContent = fmt(over.length);
+      $("k-dam-note").textContent = "จากทั้งหมด " + fmt(state.dams.length) + " เขื่อน";
+      $("dBody").innerHTML = state.dams.length ? state.dams.map(function(d){
+        var c = d.pct>100?"var(--lv5)":d.pct>80?"var(--lv4)":d.pct>50?"var(--lv3)":d.pct>30?"var(--lv2)":"var(--lv1)";
+        return "<tr><td>"+esc(d.name)+"</td><td>"+esc(d.prov)+'</td><td><div style="display:flex;gap:8px;align-items:center"><div class="bar" style="flex:1"><i style="width:'+Math.min(d.pct||0,100)+'%;background:'+c+'"></i></div><span style="min-width:56px;text-align:right;font-variant-numeric:tabular-nums">'+fmt(d.pct,1)+'%</span></div></td><td class="num">'+fmt(d.inflow,2)+'</td><td class="num">'+fmt(d.rel,2)+"</td><td>"+esc(d.date)+"</td></tr>";
+      }).join("") : '<tr><td colspan="6" class="empty">ไม่มีข้อมูลเขื่อน</td></tr>';
+      setStatus("st-dam","ok");
+    }).catch(function(){
+      setStatus("st-dam","err");
+      $("dBody").innerHTML = '<tr><td colspan="6">'+failMsg("เขื่อน","https://www.thaiwater.net/water/dam")+'</td></tr>';
+    });
+  }
+
+  /* ---------- GDACS ---------- */
+  function loadGdacs(){
+    setStatus("st-gdacs","load");
+    return getJSON(SRC.gdacs).then(function(j){
+      var f = (j && j.features) || [];
+      var items = f.map(function(x){ return x.properties||{}; })
+        .sort(function(a,b){ return String(b.todate||b.fromdate).localeCompare(String(a.todate||a.fromdate)); }).slice(0,8);
+      var colors = {red:"var(--lv5)",orange:"var(--lv1)",green:"var(--lv3)"};
+      var lvTh = {red:"แดง (รุนแรงมาก)",orange:"ส้ม (รุนแรง)",green:"เขียว (เฝ้าระวัง)"};
+      $("alertList").innerHTML = items.length ? items.map(function(p){
+        var lv = String(p.alertlevel||"").toLowerCase(), url = (p.url && p.url.report) || "https://www.gdacs.org";
+        var active = p.iscurrent===true || p.iscurrent==="true";
+        return '<div class="alert-item"><i class="lvl" style="background:'+(colors[lv]||"var(--muted)")+'"></i><div><h4>'+esc(p.name||p.eventname||"Flood")+(active?' <span class="badge" style="background:var(--lv5)">กำลังเกิด</span>':'')+
+          '</h4><p>ระดับเตือนภัย: '+esc(lvTh[lv]||p.alertlevel||"-")+' · '+esc(String(p.fromdate||"").slice(0,10))+' ถึง '+esc(String(p.todate||"").slice(0,10))+
+          ' · <a href="'+esc(url)+'" target="_blank" rel="noopener">รายงาน GDACS</a></p></div></div>';
+      }).join("") : '<div class="card empty">ไม่มีเหตุการณ์น้ำท่วมในไทยที่ GDACS รายงานในช่วงนี้</div>';
+      setStatus("st-gdacs","ok");
+    }).catch(function(){
+      setStatus("st-gdacs","err");
+      $("alertList").innerHTML = failMsg("คำเตือนภัย GDACS","https://www.gdacs.org/Alerts/default.aspx");
+    });
+  }
+
+  /* ---------- Forecast ---------- */
+  function loadForecast(){
+    var c = CITIES[+$("city").value || 0];
+    setStatus("st-fc","load");
+    var url = SRC.meteo + "?latitude="+c[1]+"&longitude="+c[2]+"&daily=precipitation_sum,precipitation_probability_max&timezone=Asia%2FBangkok&forecast_days=7";
+    return getJSON(url).then(function(j){
+      var d = j.daily || {}, t = d.time || [], p = d.precipitation_sum || [], pr = d.precipitation_probability_max || [];
+      var max = Math.max.apply(null, p.concat([20]));
+      $("fc").innerHTML = t.map(function(day,i){
+        var dt = new Date(day+"T00:00:00"), lab = dt.toLocaleDateString("th-TH",{weekday:"short"}), v = p[i]||0;
+        var col = v>=90?"var(--lv5)":v>=35?"var(--lv4)":"var(--brand)";
+        return '<div class="col" title="'+esc(day)+' · โอกาสฝน '+(pr[i]==null?"-":pr[i])+'%"><span class="mm">'+fmt(v,0)+'</span><div class="b" style="height:'+(v/max*150)+'px;background:'+col+'"></div><span>'+lab+'</span><span>'+dt.getDate()+'</span></div>';
+      }).join("");
+      var total = p.reduce(function(a,b){return a+(b||0);},0);
+      $("fcNote").textContent = "รวม 7 วัน: "+fmt(total,0)+" มม. · ชี้เมาส์ที่แท่งเพื่อดูโอกาสฝน";
+      setStatus("st-fc","ok");
+    }).catch(function(){
+      setStatus("st-fc","err");
+      $("fc").innerHTML = ""; $("fcNote").innerHTML = failMsg("พยากรณ์ฝน","https://open-meteo.com");
+    });
+  }
+
+  function loadAll(){
+    $("updated").textContent = "กำลังโหลดข้อมูล…";
+    return Promise.all([loadWater(),loadRain(),loadDams(),loadGdacs(),loadForecast()]).then(function(){
+      $("updated").textContent = "อัปเดตล่าสุด " + new Date().toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short"});
+    });
+  }
+
+  /* ---------- Theme ---------- */
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem("sfg-theme"); if (saved) root.setAttribute("data-theme", saved); } catch(e){}
+  $("themeBtn").addEventListener("click", function(){
+    var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme")==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark"; root.setAttribute("data-theme", next);
+    try { localStorage.setItem("sfg-theme", next); } catch(e){}
+    drawMap();
+  });
+
+  /* ---------- Wire up ---------- */
+  $("city").innerHTML = CITIES.map(function(c,i){ return '<option value="'+i+'">'+c[0]+'</option>'; }).join("");
+  $("city").addEventListener("change", loadForecast);
+  $("wSearch").addEventListener("input", renderWater);
+  $("wLimit").addEventListener("change", renderWater);
+  $("refreshBtn").addEventListener("click", loadAll);
+  Array.prototype.forEach.call(document.querySelectorAll("#mapFilter button"), function(b){
+    b.addEventListener("click", function(){
+      document.querySelectorAll("#mapFilter button").forEach(function(x){ x.classList.toggle("on", x===b); });
+      state.mapFilter = b.getAttribute("data-f"); drawMap();
+    });
+  });
+  initMap();
+  loadAll();
+  setInterval(loadAll, 15*60*1000);
+})();
+</script>
+</body>
+</html>
