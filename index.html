@@ -325,6 +325,8 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
     var ctl = new AbortController(); var t = setTimeout(function(){ ctl.abort(); }, ms || 20000);
     return fetch(url,{signal:ctl.signal}).then(function(r){ clearTimeout(t); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
   }
+  /* อ่านข้อมูลสำเนาที่ GitHub Actions ดึงมาเก็บไว้ (data/*.json) ก่อน ถ้าไม่มีจึงเรียก API ตรง */
+  function getData(local, remote){ return getJSON(local + "?t=" + Date.now()).catch(function(){ return getJSON(remote); }); }
   function setStatus(id, s){ var el=$(id); el.className = "dot " + s; }
   function findArray(j){
     if (Array.isArray(j)) return j;
@@ -371,7 +373,7 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
   /* ---------- Water level ---------- */
   function loadWater(){
     setStatus("st-water","load");
-    return getJSON(SRC.water).then(function(j){
+    return getData("data/waterlevel.json",SRC.water).then(function(j){
       state.water = findArray(j).map(function(d){
         var st=d.station||{}, pct=num(d.storage_percent);
         return { name: th(st.tele_station_name), prov: th((d.geocode||{}).province_name), msl: num(d.waterlevel_msl),
@@ -400,7 +402,7 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
   /* ---------- Rain ---------- */
   function loadRain(){
     setStatus("st-rain","load");
-    return getJSON(SRC.rain).then(function(j){
+    return getData("data/rain.json",SRC.rain).then(function(j){
       state.rain = findArray(j).map(function(d){
         var st=d.station||{};
         return { name: th(st.tele_station_name), prov: th((d.geocode||{}).province_name), v: num(d.rain_24h), time: d.rainfall_datetime||"",
@@ -423,7 +425,7 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
   /* ---------- Dams ---------- */
   function loadDams(){
     setStatus("st-dam","load");
-    return getJSON(SRC.main).then(function(j){
+    return getData("data/main.json",SRC.main).then(function(j){
       var arr = (j && j.dam && j.dam.data && Array.isArray(j.dam.data.data)) ? j.dam.data.data : findArray(j && j.dam);
       state.dams = arr.map(function(d){
         return { name: th((d.dam||{}).dam_name), prov: th((d.geocode||{}).province_name), pct: num(d.dam_storage_percent),
