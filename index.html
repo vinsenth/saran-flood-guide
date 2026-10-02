@@ -111,6 +111,14 @@ tr:last-child td{border-bottom:0}
 .contact{display:flex;flex-direction:column;text-decoration:none;color:var(--text)}
 .contact b{font-size:26px;color:var(--brand)}
 .contact span{font-size:13px;color:var(--muted)}
+tr.dim td{opacity:.55}
+.near{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.near-title{font-weight:600;margin-bottom:6px}
+.near-row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.near-row:first-of-type{border-top:0}
+.near-row small{color:var(--muted)}
+.map-hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+.banner{margin:0 0 8px}
 .msg{padding:12px 14px;border-radius:10px;background:var(--warn-bg);color:var(--warn-text);font-size:14px}
 .empty{color:var(--muted);font-size:14px;padding:12px}
 .sources li{margin-bottom:6px}
@@ -143,7 +151,8 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
 <div class="wrap">
   <div class="hero">
     <h1>สถานการณ์น้ำท่วมประเทศไทย</h1>
-    <p class="lead">ติดตามระดับน้ำในแม่น้ำ ปริมาณฝน ความจุเขื่อน และคำเตือนภัยน้ำท่วม จากแหล่งข้อมูลสาธารณะ อัปเดตอัตโนมัติทุก 15 นาที</p>
+    <p class="lead">ติดตามระดับน้ำในแม่น้ำ ปริมาณฝน ความจุเขื่อน และคำเตือนภัยน้ำท่วม จากแหล่งข้อมูลสาธารณะ สำเนาข้อมูลอัปเดตทุก 30 นาที</p>
+    <div class="msg banner" id="staleWarn" role="status" hidden></div>
     <div class="status-row">
       <span class="pill"><span class="dot load" id="st-water"></span>ระดับน้ำ</span>
       <span class="pill"><span class="dot load" id="st-rain"></span>ฝน 24 ชม.</span>
@@ -157,7 +166,7 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
 
   <section id="overview" style="padding-top:8px">
     <div class="grid kpis">
-      <div class="card kpi danger"><div class="label">สถานีน้ำล้นตลิ่ง</div><div class="value" id="k-over">–</div><div class="note">ระดับน้ำ &gt; 100% ของความจุลำน้ำ</div></div>
+      <div class="card kpi danger"><div class="label">สถานีน้ำล้นตลิ่ง</div><div class="value" id="k-over">–</div><div class="note">ระดับน้ำ &gt; 100% ของความจุลำน้ำ<br><span id="k-excl"></span></div></div>
       <div class="card kpi watch"><div class="label">สถานีน้ำมาก (เฝ้าระวัง)</div><div class="value" id="k-high">–</div><div class="note">ระดับน้ำ 70–100%</div></div>
       <div class="card kpi"><div class="label">ฝนสะสม 24 ชม. สูงสุด</div><div class="value" id="k-rain">–</div><div class="note" id="k-rain-where">&nbsp;</div></div>
       <div class="card kpi"><div class="label">เขื่อนใหญ่ที่น้ำเกิน 80%</div><div class="value" id="k-dam">–</div><div class="note" id="k-dam-note">&nbsp;</div></div>
@@ -173,14 +182,18 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
         <button data-f="risk">เฉพาะน้ำมาก/ล้นตลิ่ง</button>
         <button data-f="rain">ฝนตกหนัก (≥35 มม.)</button>
       </div>
+      <button class="icon-btn" id="nearBtn" type="button">📍 ใกล้ฉัน</button>
     </div>
     <div id="map" role="region" aria-label="แผนที่"></div>
+    <p class="map-hint" id="mapHint" hidden>ใช้สองนิ้วเพื่อเลื่อนหรือซูมแผนที่</p>
+    <div class="near" id="nearBox" hidden></div>
     <div class="legend">
       <span><i class="sw" style="background:var(--lv1)"></i>น้อยวิกฤต (≤10%)</span>
       <span><i class="sw" style="background:var(--lv2)"></i>น้อย (10–30%)</span>
       <span><i class="sw" style="background:var(--lv3)"></i>ปกติ (30–70%)</span>
       <span><i class="sw" style="background:var(--lv4)"></i>น้ำมาก (70–100%)</span>
       <span><i class="sw" style="background:var(--lv5)"></i>ล้นตลิ่ง (&gt;100%)</span>
+      <span><i class="sw" style="background:var(--muted)"></i>ข้อมูลเก่า/ผิดปกติ</span>
     </div>
   </section>
 
@@ -303,6 +316,9 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
     gdacs: "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=FL&country=Thailand",
     meteo: "https://api.open-meteo.com/v1/forecast"
   };
+  var STALE_H = 24;      /* ข้อมูลสถานีเก่ากว่านี้ (ชม.) ไม่นับในสรุป */
+  var ODD_PCT = 300;     /* % ความจุลำน้ำเกินนี้ถือว่าค่าผิดปกติ (น่าจะเป็นเซนเซอร์) */
+  var CACHE_WARN_H = 2;  /* สำเนาข้อมูลเก่ากว่านี้ (ชม.) ให้ขึ้นคำเตือน */
   var CITIES = [
     ["กรุงเทพมหานคร",13.7563,100.5018],["พระนครศรีอยุธยา",14.3532,100.5689],["นครสวรรค์",15.7047,100.1372],
     ["เชียงใหม่",18.7883,98.9853],["เชียงราย",19.9105,99.8406],["พิษณุโลก",16.8211,100.2659],["สุโขทัย",17.0078,99.8230],
@@ -313,24 +329,34 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
   var LV = [
     {n:"น้อยวิกฤต",c:"--lv1"},{n:"น้อย",c:"--lv2"},{n:"ปกติ",c:"--lv3"},{n:"น้ำมาก",c:"--lv4"},{n:"ล้นตลิ่ง",c:"--lv5"}
   ];
-  var state = { water:[], rain:[], dams:[], mapFilter:"all" };
+  var state = { water:[], rain:[], dams:[], mapFilter:"all", fetched:null, waterLatest:null, me:null };
   var $ = function(id){ return document.getElementById(id); };
   var css = function(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
   var esc = function(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); };
   var num = function(v){ var n = parseFloat(v); return isFinite(n) ? n : null; };
   var fmt = function(n,d){ return n==null ? "–" : n.toLocaleString("th-TH",{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); };
   var th = function(o){ return o ? (o.th || o.en || "") : ""; };
+  /* เวลาจาก ThaiWater เป็นเวลาไทย รูปแบบ "YYYY-MM-DD HH:MM" */
+  var bkk = function(s){ if(!s) return null; var t = Date.parse(String(s).replace(" ","T") + (String(s).length<=16?":00":"") + "+07:00"); return isFinite(t) ? t : null; };
+  var ageH = function(s){ var t = bkk(s); return t==null ? null : (Date.now()-t)/3600e3; };
+  var hhmm = function(t){ return new Date(t).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); };
 
   function getJSON(url, ms){
     var ctl = new AbortController(); var t = setTimeout(function(){ ctl.abort(); }, ms || 20000);
     return fetch(url,{signal:ctl.signal}).then(function(r){ clearTimeout(t); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
   }
-  /* อ่านข้อมูลสำเนาที่ GitHub Actions ดึงมาเก็บไว้ (data/*.json) ก่อน ถ้าไม่มีจึงเรียก API ตรง */
-  function getData(local, remote){ return getJSON(local + "?t=" + Date.now()).catch(function(){ return getJSON(remote); }); }
+  /* อ่านสำเนาที่ GitHub Actions เตรียมไว้ (data/*.json) ก่อน ถ้าไม่มีจึงเรียก API ตรง */
+  function getData(local, remote){
+    return getJSON(local + "?t=" + Date.now()).then(function(j){
+      if (j && j.fetched){ var f = Date.parse(j.fetched); if (isFinite(f) && (!state.fetched || f < state.fetched)) state.fetched = f; }
+      return j;
+    }).catch(function(){ return getJSON(remote); });
+  }
   function setStatus(id, s){ var el=$(id); el.className = "dot " + s; }
   function findArray(j){
     if (Array.isArray(j)) return j;
     if (!j || typeof j!=="object") return [];
+    if (Array.isArray(j.rows)) return j.rows;
     if (Array.isArray(j.data)) return j.data;
     for (var k in j){ var v=j[k]; if (v && typeof v==="object"){ var a=findArray(v); if (a.length) return a; } }
     return [];
@@ -339,50 +365,102 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
     if (pct!=null){ if(pct>100) return 5; if(pct>70) return 4; if(pct>30) return 3; if(pct>10) return 2; return 1; }
     var s = parseInt(sit,10); return (s>=1 && s<=5) ? s : 0;
   }
-  function badge(l){ if(!l) return '<span class="badge" style="background:var(--muted)">ไม่มีข้อมูล</span>'; return '<span class="badge" style="background:var('+LV[l-1].c+')">'+LV[l-1].n+'</span>'; }
+  function badge(w){
+    if (w.odd) return '<span class="badge" style="background:var(--muted)">ค่าผิดปกติ</span>';
+    if (w.stale) return '<span class="badge" style="background:var(--muted)">ข้อมูลเก่า</span>';
+    var l = w.lvl;
+    if(!l) return '<span class="badge" style="background:var(--muted)">ไม่มีข้อมูล</span>';
+    return '<span class="badge" style="background:var('+LV[l-1].c+')">'+LV[l-1].n+'</span>';
+  }
   function failMsg(name, url){ return '<div class="msg">ไม่สามารถโหลดข้อมูล'+esc(name)+'ได้ในขณะนี้ — <a href="'+url+'" target="_blank" rel="noopener">เปิดดูที่แหล่งข้อมูล</a></div>'; }
+  function dist(a,b,c,d){ var R=6371, r=Math.PI/180, x=Math.sin((c-a)*r/2), y=Math.sin((d-b)*r/2); return 2*R*Math.asin(Math.sqrt(x*x+Math.cos(a*r)*Math.cos(c*r)*y*y)); }
 
   /* ---------- Map ---------- */
-  var map=null, layer=null;
+  var map=null, layer=null, meLayer=null;
   function initMap(){
     if (!window.L) { $("map").innerHTML = '<div class="empty">โหลดแผนที่ไม่สำเร็จ</div>'; return; }
-    map = L.map("map",{scrollWheelZoom:false}).setView([13.2,101.0],6);
+    var touch = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+    /* บนมือถือ ปิดการลากด้วยนิ้วเดียว เพื่อให้เลื่อนหน้าเว็บได้ (ใช้สองนิ้วซูม/เลื่อนแผนที่) */
+    map = L.map("map",{scrollWheelZoom:false, dragging:!touch, tap:false}).setView([13.2,101.0],6);
+    if (touch){ $("mapHint").hidden = false; }
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
     layer = L.layerGroup().addTo(map);
+    meLayer = L.layerGroup().addTo(map);
   }
   function drawMap(){
     if (!map) return; layer.clearLayers();
     if (state.mapFilter==="rain"){
-      state.rain.filter(function(r){return r.v>=35;}).forEach(function(r){
-        if (r.lat==null) return;
+      state.rain.filter(function(r){return r.v>=35 && r.lat!=null;}).slice().sort(function(a,b){return a.v-b.v;}).forEach(function(r){
         var c = r.v>=90 ? css("--lv5") : css("--lv4");
         L.circleMarker([r.lat,r.lng],{radius:Math.min(4+r.v/15,16),color:c,fillColor:c,fillOpacity:.55,weight:1})
           .bindPopup("<b>"+esc(r.name)+"</b><br>"+esc(r.prov)+"<br>ฝน 24 ชม.: <b>"+fmt(r.v,1)+" มม.</b><br>"+esc(r.time)).addTo(layer);
       });
       return;
     }
-    state.water.forEach(function(w){
-      if (w.lat==null || w.lng==null) return;
-      if (state.mapFilter==="risk" && w.lvl<4) return;
-      var c = w.lvl ? css(LV[w.lvl-1].c) : css("--muted");
-      L.circleMarker([w.lat,w.lng],{radius:w.lvl>=4?7:5,color:c,fillColor:c,fillOpacity:.85,weight:1})
-        .bindPopup("<b>"+esc(w.name)+"</b><br>"+esc(w.prov)+"<br>ระดับน้ำ: "+fmt(w.msl,2)+" ม.รทก.<br>% ความจุลำน้ำ: <b>"+fmt(w.pct,1)+"%</b><br>"+(w.lvl?LV[w.lvl-1].n:"")+"<br><small>"+esc(w.time)+"</small>").addTo(layer);
-    });
+    /* วาดระดับต่ำก่อน ระดับสูงทีหลัง จุดสีแดงจะอยู่บนสุดไม่ถูกบัง */
+    state.water.filter(function(w){ return w.lat!=null && w.lng!=null && (state.mapFilter!=="risk" || (w.ok && w.lvl>=4)); })
+      .sort(function(a,b){ return (a.ok?a.lvl:-1)-(b.ok?b.lvl:-1); })
+      .forEach(function(w){
+        var c = (w.ok && w.lvl) ? css(LV[w.lvl-1].c) : css("--muted");
+        L.circleMarker([w.lat,w.lng],{radius:w.ok&&w.lvl>=4?7:4,color:c,fillColor:c,fillOpacity:w.ok?.85:.4,weight:1})
+          .bindPopup("<b>"+esc(w.name)+"</b><br>"+esc(w.prov)+"<br>ระดับน้ำ: "+fmt(w.msl,2)+" ม.รทก.<br>% ความจุลำน้ำ: <b>"+fmt(w.pct,1)+"%</b><br>"+
+            (w.odd?"ค่าผิดปกติ — โปรดตรวจสอบกับแหล่งข้อมูล":w.stale?"ข้อมูลเก่ากว่า "+STALE_H+" ชม.":(w.lvl?LV[w.lvl-1].n:""))+"<br><small>"+esc(w.time)+"</small>").addTo(layer);
+      });
+  }
+
+  /* ---------- Near me ---------- */
+  function nearMe(){
+    var box = $("nearBox");
+    if (!navigator.geolocation){ box.hidden=false; box.innerHTML='<div class="msg">เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง</div>'; return; }
+    $("nearBtn").disabled = true; $("nearBtn").textContent = "กำลังหาตำแหน่ง…";
+    navigator.geolocation.getCurrentPosition(function(pos){
+      $("nearBtn").disabled = false; $("nearBtn").textContent = "📍 ใกล้ฉัน";
+      state.me = [pos.coords.latitude, pos.coords.longitude];
+      if (map){ meLayer.clearLayers(); L.circleMarker(state.me,{radius:8,color:"#fff",weight:3,fillColor:css("--brand"),fillOpacity:1}).bindPopup("ตำแหน่งของคุณ").addTo(meLayer); map.setView(state.me, 10); }
+      renderNear();
+    }, function(){
+      $("nearBtn").disabled = false; $("nearBtn").textContent = "📍 ใกล้ฉัน";
+      box.hidden=false; box.innerHTML='<div class="msg">ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง — ลองค้นหาด้วยชื่อจังหวัดในตารางด้านล่างแทน</div>';
+    }, {enableHighAccuracy:false, timeout:15000, maximumAge:600000});
+  }
+  function renderNear(){
+    if (!state.me) return;
+    var me = state.me, box = $("nearBox");
+    var list = state.water.filter(function(w){ return w.lat!=null && w.ok; })
+      .map(function(w){ return {w:w, km:dist(me[0],me[1],w.lat,w.lng)}; })
+      .sort(function(a,b){ return a.km-b.km; }).slice(0,5);
+    box.hidden = false;
+    box.innerHTML = list.length ? '<div class="near-title">สถานีวัดระดับน้ำใกล้คุณ</div>' + list.map(function(x){
+      return '<div class="near-row"><span>'+esc(x.w.name)+' <small>จ.'+esc(x.w.prov)+' · '+fmt(x.km,1)+' กม.</small></span><span>'+fmt(x.w.pct,0)+'% '+badge(x.w)+'</span></div>';
+    }).join("") : '<div class="empty">ไม่พบสถานีใกล้เคียง</div>';
   }
 
   /* ---------- Water level ---------- */
   function loadWater(){
     setStatus("st-water","load");
-    return getData("data/waterlevel.json",SRC.water).then(function(j){
-      state.water = findArray(j).map(function(d){
-        var st=d.station||{}, pct=num(d.storage_percent);
-        return { name: th(st.tele_station_name), prov: th((d.geocode||{}).province_name), msl: num(d.waterlevel_msl),
-          pct: pct, lvl: levelOf(pct, d.situation_level), time: d.waterlevel_datetime||"", lat: num(st.tele_station_lat), lng: num(st.tele_station_long) };
+    return getData("data/waterlevel.json", SRC.water).then(function(j){
+      var rows = findArray(j).map(function(d){
+        if (d.s!==undefined) return { name:d.s, prov:d.p, msl:num(d.m), pct:num(d.c), sit:d.l, time:d.t||"", lat:num(d.y), lng:num(d.x) };
+        var st=d.station||{};
+        return { name: th(st.tele_station_name), prov: th((d.geocode||{}).province_name), msl: num(d.waterlevel_msl), pct: num(d.storage_percent),
+          sit: d.situation_level, time: d.waterlevel_datetime||"", lat: num(st.tele_station_lat), lng: num(st.tele_station_long) };
       }).filter(function(w){ return w.name; });
-      state.water.sort(function(a,b){ return (b.pct==null?-1e9:b.pct)-(a.pct==null?-1e9:a.pct); });
-      $("k-over").textContent = fmt(state.water.filter(function(w){return w.lvl===5;}).length);
-      $("k-high").textContent = fmt(state.water.filter(function(w){return w.lvl===4;}).length);
-      renderWater(); drawMap(); setStatus("st-water","ok");
+      rows.forEach(function(w){
+        var a = ageH(w.time);
+        w.lvl = levelOf(w.pct, w.sit);
+        w.stale = a==null || a > STALE_H;
+        w.odd = w.pct!=null && w.pct > ODD_PCT;
+        w.ok = !w.stale && !w.odd;
+        var t = bkk(w.time); if (t && w.ok && (!state.waterLatest || t > state.waterLatest)) state.waterLatest = t;
+      });
+      /* สถานีที่ใช้ได้เรียงก่อน ตามด้วยข้อมูลเก่า/ผิดปกติ */
+      rows.sort(function(a,b){ return (b.ok-a.ok) || ((b.pct==null?-1e9:b.pct)-(a.pct==null?-1e9:a.pct)); });
+      state.water = rows;
+      var ok = rows.filter(function(w){return w.ok;}), bad = rows.length-ok.length;
+      $("k-over").textContent = fmt(ok.filter(function(w){return w.lvl===5;}).length);
+      $("k-high").textContent = fmt(ok.filter(function(w){return w.lvl===4;}).length);
+      $("k-excl").textContent = bad ? "ไม่นับ "+fmt(bad)+" สถานีที่ข้อมูลเก่า/ผิดปกติ" : "";
+      renderWater(); drawMap(); renderNear(); setStatus("st-water","ok");
     }).catch(function(){
       setStatus("st-water","err");
       $("wBody").innerHTML = '<tr><td colspan="6">'+failMsg("ระดับน้ำ","https://www.thaiwater.net/water/wl")+'</td></tr>';
@@ -391,25 +469,27 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
   function renderWater(){
     var q = $("wSearch").value.trim().toLowerCase(), lim = +$("wLimit").value;
     var rows = state.water.filter(function(w){ return !q || (w.name+" "+w.prov).toLowerCase().indexOf(q)>-1; }).slice(0,lim);
-    if (!rows.length){ $("wBody").innerHTML = '<tr><td colspan="6" class="empty">ไม่พบสถานีที่ค้นหา</td></tr>'; return; }
+    if (!rows.length){ $("wBody").innerHTML = '<tr><td colspan="6" class="empty">'+(state.water.length?"ไม่พบสถานีที่ค้นหา":"ไม่มีข้อมูล")+'</td></tr>'; return; }
     $("wBody").innerHTML = rows.map(function(w){
-      var p = w.pct==null?0:Math.min(w.pct,150)/150*100, c = w.lvl?"var("+LV[w.lvl-1].c+")":"var(--muted)";
-      return "<tr><td>"+esc(w.name)+"</td><td>"+esc(w.prov)+'</td><td class="num">'+fmt(w.msl,2)+
-        '</td><td><div style="display:flex;gap:8px;align-items:center"><div class="bar" style="flex:1"><i style="width:'+p+'%;background:'+c+'"></i></div><span style="font-variant-numeric:tabular-nums;min-width:56px;text-align:right">'+fmt(w.pct,1)+'%</span></div></td><td>'+badge(w.lvl)+"</td><td>"+esc(w.time)+"</td></tr>";
+      var p = w.pct==null?0:Math.min(w.pct,150)/150*100, c = (w.ok&&w.lvl)?"var("+LV[w.lvl-1].c+")":"var(--muted)";
+      return '<tr'+(w.ok?'':' class="dim"')+'><td>'+esc(w.name)+"</td><td>"+esc(w.prov)+'</td><td class="num">'+fmt(w.msl,2)+
+        '</td><td><div style="display:flex;gap:8px;align-items:center"><div class="bar" style="flex:1"><i style="width:'+p+'%;background:'+c+'"></i></div><span style="font-variant-numeric:tabular-nums;min-width:56px;text-align:right">'+fmt(w.pct,1)+'%</span></div></td><td>'+badge(w)+"</td><td>"+esc(w.time)+"</td></tr>";
     }).join("");
   }
 
   /* ---------- Rain ---------- */
   function loadRain(){
     setStatus("st-rain","load");
-    return getData("data/rain.json",SRC.rain).then(function(j){
+    return getData("data/rain.json", SRC.rain).then(function(j){
       state.rain = findArray(j).map(function(d){
+        if (d.s!==undefined) return { name:d.s, prov:d.p, v:num(d.v), time:d.t||"", lat:num(d.y), lng:num(d.x) };
         var st=d.station||{};
         return { name: th(st.tele_station_name), prov: th((d.geocode||{}).province_name), v: num(d.rain_24h), time: d.rainfall_datetime||"",
           lat: num(st.tele_station_lat), lng: num(st.tele_station_long) };
-      }).filter(function(r){ return r.v!=null; }).sort(function(a,b){ return b.v-a.v; });
+      }).filter(function(r){ var a = ageH(r.time); return r.v!=null && r.v>0 && a!=null && a<=STALE_H+6; }).sort(function(a,b){ return b.v-a.v; });
       var top = state.rain.slice(0,15), max = top.length ? top[0].v : 1;
       if (top.length){ $("k-rain").textContent = fmt(top[0].v,1)+" มม."; $("k-rain-where").textContent = top[0].name+" จ."+top[0].prov; }
+      else { $("k-rain").textContent = "0 มม."; $("k-rain-where").textContent = "ไม่มีรายงานฝน"; }
       $("rainList").innerHTML = top.length ? top.map(function(r){
         var c = r.v>=90 ? "var(--lv5)" : r.v>=35 ? "var(--lv4)" : "var(--brand)";
         return '<div class="rain-row"><div class="nm">'+esc(r.name)+' <small>จ.'+esc(r.prov)+'</small></div><div class="bar"><i style="width:'+(r.v/max*100)+'%;background:'+c+'"></i></div><div class="v">'+fmt(r.v,1)+'</div></div>';
@@ -425,9 +505,10 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
   /* ---------- Dams ---------- */
   function loadDams(){
     setStatus("st-dam","load");
-    return getData("data/main.json",SRC.main).then(function(j){
-      var arr = (j && j.dam && j.dam.data && Array.isArray(j.dam.data.data)) ? j.dam.data.data : findArray(j && j.dam);
+    return getData("data/dam.json", SRC.main).then(function(j){
+      var arr = (j && j.dam && j.dam.data && Array.isArray(j.dam.data.data)) ? j.dam.data.data : findArray(j && (j.rows ? j : j.dam));
       state.dams = arr.map(function(d){
+        if (d.s!==undefined) return { name:d.s, prov:d.p, pct:num(d.c), inflow:num(d.i), rel:num(d.o), date:d.d||"" };
         return { name: th((d.dam||{}).dam_name), prov: th((d.geocode||{}).province_name), pct: num(d.dam_storage_percent),
           inflow: num(d.dam_inflow), rel: num(d.dam_released), date: d.dam_date||"" };
       }).filter(function(d){ return d.name; }).sort(function(a,b){ return (b.pct||0)-(a.pct||0); });
@@ -482,7 +563,7 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
         return '<div class="col" title="'+esc(day)+' · โอกาสฝน '+(pr[i]==null?"-":pr[i])+'%"><span class="mm">'+fmt(v,0)+'</span><div class="b" style="height:'+(v/max*150)+'px;background:'+col+'"></div><span>'+lab+'</span><span>'+dt.getDate()+'</span></div>';
       }).join("");
       var total = p.reduce(function(a,b){return a+(b||0);},0);
-      $("fcNote").textContent = "รวม 7 วัน: "+fmt(total,0)+" มม. · ชี้เมาส์ที่แท่งเพื่อดูโอกาสฝน";
+      $("fcNote").textContent = "รวม 7 วัน: "+fmt(total,0)+" มม. · ชี้หรือแตะแท่งเพื่อดูโอกาสฝน";
       setStatus("st-fc","ok");
     }).catch(function(){
       setStatus("st-fc","err");
@@ -492,8 +573,17 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
 
   function loadAll(){
     $("updated").textContent = "กำลังโหลดข้อมูล…";
+    state.fetched = null; state.waterLatest = null;
     return Promise.all([loadWater(),loadRain(),loadDams(),loadGdacs(),loadForecast()]).then(function(){
-      $("updated").textContent = "อัปเดตล่าสุด " + new Date().toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short"});
+      var parts = [];
+      if (state.waterLatest) parts.push("ระดับน้ำล่าสุด " + hhmm(state.waterLatest));
+      if (state.fetched) parts.push("ดึงข้อมูลเมื่อ " + hhmm(state.fetched));
+      $("updated").textContent = parts.length ? parts.join(" · ") : "อัปเดตล่าสุด " + hhmm(Date.now());
+      var warn = $("staleWarn"), h = state.fetched ? (Date.now()-state.fetched)/3600e3 : 0;
+      if (h > CACHE_WARN_H){
+        warn.hidden = false;
+        warn.innerHTML = "ข้อมูลระดับน้ำ ฝน และเขื่อนยังไม่ได้อัปเดตมาประมาณ "+fmt(h,0)+" ชั่วโมง — ดูข้อมูลล่าสุดได้ที่ <a href=\"https://www.thaiwater.net\" target=\"_blank\" rel=\"noopener\">ThaiWater.net</a>";
+      } else { warn.hidden = true; }
     });
   }
 
@@ -513,6 +603,7 @@ footer{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);f
   $("wSearch").addEventListener("input", renderWater);
   $("wLimit").addEventListener("change", renderWater);
   $("refreshBtn").addEventListener("click", loadAll);
+  $("nearBtn").addEventListener("click", nearMe);
   Array.prototype.forEach.call(document.querySelectorAll("#mapFilter button"), function(b){
     b.addEventListener("click", function(){
       document.querySelectorAll("#mapFilter button").forEach(function(x){ x.classList.toggle("on", x===b); });
