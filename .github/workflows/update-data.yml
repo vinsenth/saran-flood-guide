@@ -1,0 +1,37 @@
+name: Update flood data
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch ThaiWater data
+        run: |
+          mkdir -p data
+          B=https://api-v3.thaiwater.net/api/v1/thaiwater30/public
+          fetch_one() {
+            if curl -fsSL --retry 3 --retry-delay 15 -m 90 -A "Mozilla/5.0 (SaranFloodGuide; +https://vinsenth.github.io/saran-flood-guide/)" "$B/$2" -o "data/$1.tmp" && python3 -c "import json,sys; json.load(open(sys.argv[1]))" "data/$1.tmp"; then
+              mv "data/$1.tmp" "data/$1.json"
+            else
+              echo "::warning::failed to fetch $2"
+              rm -f "data/$1.tmp"
+            fi
+          }
+          fetch_one waterlevel waterlevel_load
+          fetch_one rain rain_24h
+          fetch_one main thailand_main
+          ls -la data
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then echo "no changes"; else git commit -m "Update flood data $(date -u +%Y-%m-%dT%H:%MZ)" && git push; fi
